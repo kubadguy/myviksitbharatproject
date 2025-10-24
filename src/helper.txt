@@ -1,0 +1,551 @@
+# PROJECT STRUCTURE
+# ===================
+# db_security_system/
+# ├── main.py
+# ├── requirements.txt
+# ├── config/
+# │   ├── __init__.py
+# │   ├── settings.py
+# │   └── database_config.py
+# ├── core/
+# │   ├── __init__.py
+# │   ├── firewall.py
+# │   ├── access_control.py
+# │   ├── honeypot.py
+# │   └── logger.py
+# ├── database/
+# │   ├── __init__.py
+# │   ├── db_manager.py
+# │   ├── query_validator.py
+# │   └── fake_data_generator.py
+# ├── security/
+# │   ├── __init__.py
+# │   ├── injection_detector.py
+# │   ├── threat_analyzer.py
+# │   └── ip_tracker.py
+# ├── alerts/
+# │   ├── __init__.py
+# │   ├── alert_manager.py
+# │   ├── email_notifier.py
+# │   └── sms_notifier.py
+# ├── gui/
+# │   ├── __init__.py
+# │   ├── main_window.py
+# │   ├── dashboard.py
+# │   └── log_viewer.py
+# └── api/
+#     ├── __init__.py
+#     ├── rest_api.py
+#     └── middleware.py
+
+# ============================================================
+# FILE 1: requirements.txt
+# ============================================================
+"""
+faker==20.0.0
+PyQt6==6.6.0
+flask==3.0.0
+requests==2.31.0
+python-dotenv==1.0.0
+"""
+
+# ============================================================
+# FILE 2: config/settings.py
+# ============================================================
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+class Settings:
+    # Database settings
+    REAL_DB_PATH = os.path.join(BASE_DIR, 'data', 'real_database.db')
+    HONEYPOT_DB_PATH = os.path.join(BASE_DIR, 'data', 'honeypot_database.db')
+
+    # Security settings
+    MAX_FAILED_ATTEMPTS = 3
+    ALERT_THRESHOLD = 5
+
+    # Alert settings
+    ENABLE_EMAIL_ALERTS = True
+    ENABLE_SMS_ALERTS = False
+    ADMIN_EMAIL = "admin@company.com"
+
+    # API settings
+    API_HOST = "0.0.0.0"
+    API_PORT = 5000
+    API_DEBUG = False
+
+# ============================================================
+# FILE 3: config/database_config.py
+# ============================================================
+AUTHORIZED_APPS = {
+    'webapp_frontend': {
+        'time_windows': [(9, 17)],  # 9 AM - 5 PM
+        'allowed_operations': ['SELECT', 'INSERT', 'UPDATE'],
+        'ip_whitelist': ['192.168.1.0/24']
+    },
+    'backup_service': {
+        'time_windows': [(2, 4)],  # 2 AM - 4 AM
+        'allowed_operations': ['SELECT'],
+        'ip_whitelist': ['10.0.0.5']
+    },
+    'admin_panel': {
+        'time_windows': [(0, 23)],  # 24/7
+        'allowed_operations': ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
+        'ip_whitelist': ['192.168.1.100']
+    }
+}
+
+# ============================================================
+# FILE 4: core/access_control.py
+# ============================================================
+from datetime import datetime
+from typing import List, Tuple
+import ipaddress
+
+class AccessControl:
+    def __init__(self, config):
+        self.config = config
+
+    def is_authorized(self, app_id: str, ip_address: str,
+                     operation: str, current_time: datetime = None) -> Tuple[bool, str]:
+        if current_time is None:
+            current_time = datetime.now()
+
+        if app_id not in self.config:
+            return False, "Unknown application"
+
+        app_config = self.config[app_id]
+
+        # Check time window
+        if not self._check_time_window(current_time, app_config['time_windows']):
+            return False, "Outside authorized time window"
+
+        # Check operation
+        if operation.upper() not in app_config['allowed_operations']:
+            return False, "Unauthorized operation"
+
+        # Check IP whitelist
+        if not self._check_ip_whitelist(ip_address, app_config['ip_whitelist']):
+            return False, "IP not whitelisted"
+
+        return True, "Authorized"
+
+    def _check_time_window(self, current_time: datetime,
+                          windows: List[Tuple[int, int]]) -> bool:
+        current_hour = current_time.hour
+        for start, end in windows:
+            if start <= current_hour < end:
+                return True
+        return False
+
+    def _check_ip_whitelist(self, ip: str, whitelist: List[str]) -> bool:
+        try:
+            ip_obj = ipaddress.ip_address(ip)
+            for allowed in whitelist:
+                if '/' in allowed:
+                    if ip_obj in ipaddress.ip_network(allowed):
+                        return True
+                else:
+                    if str(ip_obj) == allowed:
+                        return True
+            return False
+        except:
+            return False
+
+# ============================================================
+# FILE 5: core/honeypot.py
+# ============================================================
+from database.fake_data_generator import FakeDataGenerator
+import sqlite3
+
+class Honeypot:
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+        self.fake_gen = FakeDataGenerator()
+        self._init_database()
+
+    def _init_database(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY,
+                username TEXT,
+                email TEXT,
+                password TEXT,
+                balance REAL
+            )
+        ''')
+        conn.commit()
+        conn.close()
+
+    def populate_fake_data(self, num_records: int = 5):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users")
+
+        fake_data = self.fake_gen.generate_users(num_records)
+        cursor.executemany('''
+            INSERT INTO users (id, username, email, password, balance)
+            VALUES (?, ?, ?, ?, ?)
+        ''', fake_data)
+
+        conn.commit()
+        conn.close()
+
+    def execute_query(self, query: str):
+        self.populate_fake_data()
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(query)
+            if query.strip().upper().startswith('SELECT'):
+                results = cursor.fetchall()
+            else:
+                conn.commit()
+                results = []
+            return results
+        except Exception as e:
+            return []
+        finally:
+            conn.close()
+
+# ============================================================
+# FILE 6: database/fake_data_generator.py
+# ============================================================
+from faker import Faker
+import hashlib
+
+class FakeDataGenerator:
+    def __init__(self):
+        self.fake = Faker()
+
+    def generate_users(self, count: int = 5):
+        users = []
+        for i in range(1, count + 1):
+            users.append((
+                i,
+                self.fake.user_name(),
+                self.fake.email(),
+                hashlib.md5(self.fake.password().encode()).hexdigest(),
+                round(self.fake.random.uniform(1000, 10000), 2)
+            ))
+        return users
+
+# ============================================================
+# FILE 7: security/injection_detector.py
+# ============================================================
+import re
+
+class InjectionDetector:
+    SQL_INJECTION_PATTERNS = [
+        r"(\bOR\b.*=.*)",
+        r"(\bAND\b.*=.*)",
+        r"(--)",
+        r"(;.*DROP)",
+        r"(;.*DELETE)",
+        r"(UNION.*SELECT)",
+        r"(\'.*OR.*\'.*=.*\')",
+        r"(\".*OR.*\".*=.*\")",
+    ]
+
+    NOSQL_INJECTION_PATTERNS = [
+        r"(\$ne|\$gt|\$lt|\$gte|\$lte)",
+        r"(\$where|\$regex)",
+        r"(\$or|\$and|\$not)",
+    ]
+
+    def detect_sql_injection(self, query: str) -> Tuple[bool, str]:
+        for pattern in self.SQL_INJECTION_PATTERNS:
+            if re.search(pattern, query, re.IGNORECASE):
+                return True, f"SQL injection pattern detected: {pattern}"
+        return False, ""
+
+    def detect_nosql_injection(self, query_obj: dict) -> Tuple[bool, str]:
+        query_str = str(query_obj)
+        for pattern in self.NOSQL_INJECTION_PATTERNS:
+            if re.search(pattern, query_str):
+                return True, f"NoSQL injection pattern detected: {pattern}"
+        return False, ""
+
+# ============================================================
+# FILE 8: core/logger.py
+# ============================================================
+from datetime import datetime
+from typing import List, Dict
+
+class SecurityLogger:
+    def __init__(self):
+        self.logs = []
+
+    def log_intrusion(self, app_id: str, ip_address: str,
+                     operation: str, query: str, reason: str):
+        log_entry = {
+            'app_id': app_id,
+            'ip_address': ip_address,
+            'operation': operation,
+            'query': query,
+            'reason': reason,
+            'action': 'REDIRECTED_TO_HONEYPOT'
+        }
+        self.logs.append(log_entry)
+        return log_entry
+
+    def get_logs(self, limit: int = None) -> List[Dict]:
+        if limit:
+            return self.logs[-limit:]
+        return self.logs
+
+    def clear_logs(self):
+        self.logs = []
+
+# ============================================================
+# FILE 9: alerts/alert_manager.py
+# ============================================================
+class AlertManager:
+    def __init__(self, email_enabled=True, sms_enabled=False):
+        self.email_enabled = email_enabled
+        self.sms_enabled = sms_enabled
+
+    def send_alert(self, log_entry: dict):
+        alert_msg = self._format_alert(log_entry)
+
+        print("\n" + "="*60)
+        print("🚨 SECURITY ALERT")
+        print("="*60)
+        print(alert_msg)
+        print("="*60 + "\n")
+
+        # Email/SMS would be sent here in production
+
+    def _format_alert(self, log: dict) -> str:
+        return f"""
+Application:  {log['app_id']}
+IP Address:   {log['ip_address']}
+Operation:    {log['operation']}
+Reason:       {log['reason']}
+Query:        {log['query'][:100]}...
+Action:       {log['action']}
+"""
+
+# ============================================================
+# FILE 10: core/firewall.py
+# ============================================================
+from core.access_control import AccessControl
+from core.honeypot import Honeypot
+from core.logger import SecurityLogger
+from alerts.alert_manager import AlertManager
+from security.injection_detector import InjectionDetector
+from config.database_config import AUTHORIZED_APPS
+from config.settings import Settings
+import sqlite3
+
+class DatabaseFirewall:
+    def __init__(self):
+        self.access_control = AccessControl(AUTHORIZED_APPS)
+        self.honeypot = Honeypot(Settings.HONEYPOT_DB_PATH)
+        self.logger = SecurityLogger()
+        self.alert_manager = AlertManager()
+        self.injection_detector = InjectionDetector()
+        self._init_real_database()
+
+    def _init_real_database(self):
+        conn = sqlite3.connect(Settings.REAL_DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY,
+                username TEXT,
+                email TEXT,
+                password TEXT,
+                balance REAL
+            )
+        ''')
+        cursor.execute("DELETE FROM users")
+        cursor.executemany('''
+            INSERT INTO users (username, email, password, balance)
+            VALUES (?, ?, ?, ?)
+        ''', [
+            ('admin', 'admin@company.com', 'real_hash_1', 50000.00),
+            ('john_doe', 'john@company.com', 'real_hash_2', 25000.00),
+        ])
+        conn.commit()
+        conn.close()
+
+    def execute_query(self, app_id: str, ip_address: str,
+                     operation: str, query: str, simulate_time=None):
+        # Check for injection
+        is_injection, reason = self.injection_detector.detect_sql_injection(query)
+
+        # Check authorization
+        is_auth, auth_reason = self.access_control.is_authorized(
+            app_id, ip_address, operation, simulate_time
+        )
+
+        if is_auth and not is_injection:
+            # Execute on real database
+            conn = sqlite3.connect(Settings.REAL_DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute(query)
+            if operation.upper() in ['INSERT', 'UPDATE', 'DELETE']:
+                conn.commit()
+                results = []
+            else:
+                results = cursor.fetchall()
+            conn.close()
+            return True, results, "Access granted"
+
+        else:
+            # Redirect to honeypot
+            final_reason = reason if is_injection else auth_reason
+            log_entry = self.logger.log_intrusion(
+                app_id, ip_address, operation, query, final_reason
+            )
+            self.alert_manager.send_alert(log_entry)
+            results = self.honeypot.execute_query(query)
+            return False, results, final_reason
+
+    def get_logs(self):
+        return self.logger.get_logs()
+
+# ============================================================
+# FILE 11: gui/main_window.py
+# ============================================================
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
+                             QHBoxLayout, QPushButton, QTextEdit,
+                             QLabel, QTableWidget, QTableWidgetItem,
+                             QLineEdit, QComboBox)
+from PyQt6.QtCore import Qt
+from core.firewall import DatabaseFirewall
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.firewall = DatabaseFirewall()
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle("Database Security System")
+        self.setGeometry(100, 100, 1200, 800)
+
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+
+        # Test query section
+        query_layout = QHBoxLayout()
+        self.app_input = QLineEdit()
+        self.app_input.setPlaceholderText("App ID")
+        self.ip_input = QLineEdit()
+        self.ip_input.setPlaceholderText("IP Address")
+        self.query_input = QLineEdit()
+        self.query_input.setPlaceholderText("SQL Query")
+        self.op_combo = QComboBox()
+        self.op_combo.addItems(['SELECT', 'INSERT', 'UPDATE', 'DELETE'])
+
+        test_btn = QPushButton("Test Query")
+        test_btn.clicked.connect(self.test_query)
+
+        query_layout.addWidget(QLabel("App:"))
+        query_layout.addWidget(self.app_input)
+        query_layout.addWidget(QLabel("IP:"))
+        query_layout.addWidget(self.ip_input)
+        query_layout.addWidget(QLabel("Op:"))
+        query_layout.addWidget(self.op_combo)
+        query_layout.addWidget(self.query_input)
+        query_layout.addWidget(test_btn)
+
+        # Results area
+        self.results_text = QTextEdit()
+        self.results_text.setReadOnly(True)
+
+        # Logs table
+        self.logs_table = QTableWidget()
+        self.logs_table.setColumnCount(5)
+        self.logs_table.setHorizontalHeaderLabels(
+            ['App ID', 'IP', 'Operation', 'Reason', 'Query']
+        )
+
+        refresh_btn = QPushButton("Refresh Logs")
+        refresh_btn.clicked.connect(self.refresh_logs)
+
+        main_layout.addLayout(query_layout)
+        main_layout.addWidget(QLabel("Results:"))
+        main_layout.addWidget(self.results_text)
+        main_layout.addWidget(refresh_btn)
+        main_layout.addWidget(self.logs_table)
+
+    def test_query(self):
+        app_id = self.app_input.text()
+        ip = self.ip_input.text()
+        query = self.query_input.text()
+        operation = self.op_combo.currentText()
+
+        is_auth, results, reason = self.firewall.execute_query(
+            app_id, ip, operation, query
+        )
+
+        status = "✅ AUTHORIZED" if is_auth else "❌ BLOCKED"
+        self.results_text.setText(
+            f"{status}\nReason: {reason}\nResults: {results}"
+        )
+        self.refresh_logs()
+
+    def refresh_logs(self):
+        logs = self.firewall.get_logs()
+        self.logs_table.setRowCount(len(logs))
+
+        for i, log in enumerate(logs):
+            self.logs_table.setItem(i, 0, QTableWidgetItem(log['app_id']))
+            self.logs_table.setItem(i, 1, QTableWidgetItem(log['ip_address']))
+            self.logs_table.setItem(i, 2, QTableWidgetItem(log['operation']))
+            self.logs_table.setItem(i, 3, QTableWidgetItem(log['reason']))
+            self.logs_table.setItem(i, 4, QTableWidgetItem(log['query'][:50]))
+
+# ============================================================
+# FILE 12: api/rest_api.py
+# ============================================================
+from flask import Flask, request, jsonify
+from core.firewall import DatabaseFirewall
+
+app = Flask(__name__)
+firewall = DatabaseFirewall()
+
+@app.route('/api/query', methods=['POST'])
+def execute_query():
+    data = request.json
+    is_auth, results, reason = firewall.execute_query(
+        data['app_id'],
+        request.remote_addr,
+        data['operation'],
+        data['query']
+    )
+
+    return jsonify({
+        'authorized': is_auth,
+        'results': results,
+        'reason': reason
+    })
+
+@app.route('/api/logs', methods=['GET'])
+def get_logs():
+    return jsonify(firewall.get_logs())
+
+# ============================================================
+# FILE 13: main.py
+# ============================================================
+import sys
+from PyQt6.QtWidgets import QApplication
+from gui.main_window import MainWindow
+
+def main():
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
+
+if __name__ == '__main__':
+    main()
