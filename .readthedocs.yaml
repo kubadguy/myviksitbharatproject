@@ -6,9 +6,9 @@ version: 2
 # Configuration for the build environment
 build:
   # Use a stable, recent OS version
-  os: ubuntu-22.04  # 24.04 might be too new/untested, 22.04 is safer for now.
+  os: ubuntu-22.04
   tools:
-    # Use Python 3.11 or 3.12, as 3.13 may not be fully supported by all Sphinx extensions yet
+    # Use Python 3.12, which is generally well-supported
     python: "3.12" 
 
 # Configuration for the Sphinx documentation tool
@@ -19,7 +19,7 @@ sphinx:
 # Configuration for installing Python dependencies
 python:
   install:
-    - method: pip
-      # Install required packages from the requirements.txt file
+    # This list item tells RTD: "Install dependencies from requirements.txt 
+    # located in the current path (.)."
+    - requirements: requirements.txt
       path: .
-      requirements: requirements.txt
