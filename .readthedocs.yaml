@@ -1,25 +1,22 @@
 # .readthedocs.yaml
 
-# Required: The version of the configuration file format
-version: 2
+# REQUIRED: Configuration file format version
+version: 2 
 
 # Configuration for the build environment
 build:
-  # Use a stable, recent OS version
   os: ubuntu-22.04
   tools:
-    # Use Python 3.12, which is generally well-supported
     python: "3.12" 
 
 # Configuration for the Sphinx documentation tool
 sphinx:
-  # Path to your configuration file (your path is correct)
+  # Path to your configuration file (assumes it's in the root)
   configuration: conf.py
 
 # Configuration for installing Python dependencies
 python:
   install:
-    # This list item tells RTD: "Install dependencies from requirements.txt 
-    # located in the current path (.)."
+    # --- SIMPLIFIED: Only specify the requirements file ---
     - requirements: requirements.txt
-      path: .
+    # -----------------------------------------------------
