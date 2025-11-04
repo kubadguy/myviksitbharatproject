@@ -1,13 +1,25 @@
-version: 0.0.2
+# .readthedocs.yaml
 
+# Required: The version of the configuration file format
+version: 2
+
+# Configuration for the build environment
 build:
-  os: ubuntu-24.04
+  # Use a stable, recent OS version
+  os: ubuntu-22.04  # 24.04 might be too new/untested, 22.04 is safer for now.
   tools:
-    python: "3.13"
+    # Use Python 3.11 or 3.12, as 3.13 may not be fully supported by all Sphinx extensions yet
+    python: "3.12" 
 
+# Configuration for the Sphinx documentation tool
 sphinx:
-   configuration: conf.py
+  # Path to your configuration file (your path is correct)
+  configuration: conf.py
 
+# Configuration for installing Python dependencies
 python:
   install:
-    - requirements: requirements.txt
+    - method: pip
+      # Install required packages from the requirements.txt file
+      path: .
+      requirements: requirements.txt
