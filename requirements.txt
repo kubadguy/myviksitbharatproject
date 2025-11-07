@@ -4,6 +4,7 @@
 # Core Sphinx and Theme
 Sphinx==8.2.3             # Match the version you currently have installed
 myst-parser==4.0.1        # Required for Markdown support
+sphinx_rtd_theme
 
 # Recommended theme (if you switch from 'alabaster' in conf.py)
 # sphinx-rtd-theme

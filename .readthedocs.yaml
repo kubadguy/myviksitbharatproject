@@ -6,17 +6,17 @@ version: 2
 # Configuration for the build environment
 build:
   os: ubuntu-22.04
-  tools:
-    python: "3.11" 
+    tools:
+        python: "3.11" 
 
 # Configuration for the Sphinx documentation tool
 sphinx:
   # Path to your configuration file (assumes it's in the root)
-  configuration: conf.py
+    configuration: conf.py
 
-# Configuration for installing Python dependencies
-python:
-  install:
-    # --- SIMPLIFIED: Only specify the requirements file ---
-    - requirements: requirements.txt
-    # -----------------------------------------------------
+    # Configuration for installing Python dependencies
+    python:
+      install:
+          # --- SIMPLIFIED: Only specify the requirements file ---
+              - requirements: requirements.txt
+                  # -----------------------------------------------------
