@@ -36,8 +36,9 @@ extensions = [
 
     # Utility Extensions
     'sphinx.ext.todo',      # Support for todo notes
-    'sphinx.ext.linkcheck', # Checks all external links for 404s
+    'sphinx.ext.linkcheck', # Comment out or remove this line if not needed
 ]
+
 
 # Configure the Markdown parser
 myst_enable_extensions = [
