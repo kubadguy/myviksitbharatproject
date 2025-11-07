@@ -36,7 +36,7 @@ extensions = [
 
     # Utility Extensions
     'sphinx.ext.todo',      # Support for todo notes
-    # 'sphinx.ext.linkcheck', # Comment out or remove this line if not needed
+    'sphinx.ext.linkcheck', # Comment out or remove this line if not needed
 ]
 
 
