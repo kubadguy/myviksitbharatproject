@@ -17,4 +17,3 @@ sphinx:
 python:
   install:
     - requirements: requirements.txt  # This is now a valid format
-    - pip install sphinx[linkcheck]
